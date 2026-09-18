@@ -24,6 +24,7 @@ class GitService:
     def __init__(self) -> None:
         self.base_dir = get_base_dir()
         self._git_executable: Optional[str] = None
+        self.last_returncode: Optional[int] = None
         self.detect_git_binary()
 
     def detect_git_binary(self) -> Optional[str]:
@@ -118,6 +119,7 @@ class GitService:
 
             stdout = process.stdout.strip()
             stderr = process.stderr.strip()
+            self.last_returncode = process.returncode
             success = process.returncode == 0
 
             if not success:
@@ -127,9 +129,11 @@ class GitService:
             return success, stdout, stderr
 
         except subprocess.TimeoutExpired:
+            self.last_returncode = -1
             logger.error(f"Timeout al ejecutar: git {' '.join(log_args)}")
             return False, "", "La operación tardó demasiado tiempo y se canceló por seguridad."
         except Exception as exc:
+            self.last_returncode = -2
             logger.error(f"Error del sistema al ejecutar git: {exc}")
             return False, "", f"Error del sistema al ejecutar Git: {exc}"
 
@@ -546,6 +550,103 @@ class GitService:
 
         return branches, current_branch
 
+    def create_branch(
+        self,
+        repo_path: str,
+        branch_name: str,
+        checkout: bool = True,
+        push_upstream: bool = False,
+    ) -> Tuple[bool, str, Dict[str, Any]]:
+        """Crea una nueva rama a partir de la rama actual (git checkout -b <nombre>).
+
+        Conserva intactos los archivos modificados locales como salida de emergencia.
+        """
+        clean_name = branch_name.strip()
+        if not clean_name:
+            return False, "Debes ingresar un nombre para la nueva rama.", {
+                "title": "⚠️ Nombre requerido",
+                "message": "Por favor escribe un nombre para la rama (ejemplo: mi-nueva-rama).",
+                "severity": "warning",
+            }
+
+        # Validaciones de caracteres no permitidos en Git
+        if " " in clean_name:
+            return False, "El nombre de la rama no puede contener espacios.", {
+                "title": "⚠️ Nombre inválido",
+                "message": "Git no permite espacios en los nombres de ramas. Usa guiones medios '-' o bajos '_' (ejemplo: mi-rama-trabajo).",
+                "severity": "warning",
+            }
+
+        invalid_chars = ["~", "^", ":", "?", "*", "[", "\\", "@{", ".."]
+        for bad in invalid_chars:
+            if bad in clean_name:
+                return False, f"El nombre contiene caracteres no permitidos: '{bad}'", {
+                    "title": "⚠️ Caracteres inválidos",
+                    "message": f"El nombre de la rama no puede contener el carácter '{bad}'. Usa solo letras, números, guiones y barras.",
+                    "severity": "warning",
+                }
+
+        # Comprobar si la rama ya existe
+        branches, current_branch = self.get_branches(repo_path)
+        if clean_name in branches:
+            return False, f"Ya existe una rama llamada '{clean_name}'.", {
+                "title": "⚠️ Rama duplicada",
+                "message": f"Ya existe una rama con el nombre '{clean_name}'. Elige un nombre diferente o cambia a esa rama existente.",
+                "severity": "warning",
+            }
+
+        # Ejecutar creación
+        cmd = ["checkout", "-b", clean_name] if checkout else ["branch", clean_name]
+        success, stdout, stderr = self.run_command(cmd, cwd=repo_path)
+        if not success:
+            code = self.last_returncode
+            logger.error(f"Error al crear rama '{clean_name}' (código {code}): {stderr}")
+            diag = ErrorTranslator.translate(stderr, stdout, f"git {' '.join(cmd)}", returncode=code)
+            return False, diag["message"], diag
+
+        logger.log_operation("create_branch", "correcto", f"Rama creada: {clean_name} (desde {current_branch})")
+
+        # Subir rama al remoto si fue solicitado
+        push_msg = ""
+        if push_upstream:
+            succ_push, out_push, err_push = self.run_command(["push", "-u", "origin", clean_name], cwd=repo_path, timeout=60)
+            if succ_push:
+                push_msg = "\n\n🚀 Además, la rama fue publicada exitosamente en GitHub."
+                logger.log_operation("push_branch", "correcto", f"Rama {clean_name} subida a origin")
+            else:
+                code = self.last_returncode
+                logger.error(f"Error al subir rama {clean_name} a origin (código {code}): {err_push}")
+                push_msg = f"\n\n⚠️ La rama se creó localmente, pero no se pudo subir a GitHub: {err_push or out_push}"
+
+        return True, f"Rama '{clean_name}' creada con éxito.{push_msg}", {
+            "title": "✅ Rama Creada",
+            "branch": clean_name,
+            "previous_branch": current_branch,
+            "raw": stdout,
+        }
+
+    def cleanup_index_lock(self, repo_path: str) -> Tuple[bool, str]:
+        """Elimina de forma segura el archivo .git/index.lock si quedó trabado por otro proceso."""
+        lock_path = os.path.join(repo_path, ".git", "index.lock")
+        if not os.path.exists(lock_path):
+            return True, "No se encontró ningún archivo index.lock activo."
+
+        try:
+            os.remove(lock_path)
+            logger.info(f"Archivo index.lock eliminado en: {lock_path}")
+            return True, "Archivo de bloqueo index.lock eliminado correctamente. Ya puedes volver a guardar."
+        except Exception as exc:
+            logger.error(f"No se pudo eliminar index.lock: {exc}")
+            return False, f"No se pudo eliminar index.lock: {exc}. Cierra otros programas abiertos e inténtalo de nuevo."
+
+    def abort_merge(self, repo_path: str) -> Tuple[bool, str]:
+        """Cancela una operación de merge inconclusa mediante git merge --abort."""
+        success, stdout, stderr = self.run_command(["merge", "--abort"], cwd=repo_path)
+        if success:
+            logger.info(f"Fusión cancelada en: {repo_path}")
+            return True, "Operación de fusión cancelada. Tu proyecto fue restaurado al estado anterior seguro."
+        return False, f"No se pudo cancelar la fusión: {stderr or stdout}"
+
     def checkout_branch(self, repo_path: str, target_branch: str) -> Tuple[bool, str, Dict[str, Any]]:
         """Cambia de rama de forma segura, verificando antes si hay cambios pendientes."""
         has_changes, changes = self.has_local_changes(repo_path)
@@ -566,7 +667,9 @@ class GitService:
             logger.log_operation("checkout_branch", "correcto", f"Rama: {target_branch}")
             return True, f"Cambiado a la rama '{target_branch}' con éxito.", {}
 
-        diag = ErrorTranslator.translate(stderr, stdout, f"git checkout {target_branch}")
+        code = self.last_returncode
+        logger.error(f"Fallo en checkout a '{target_branch}' (código {code}): {stderr}")
+        diag = ErrorTranslator.translate(stderr, stdout, f"git checkout {target_branch}", returncode=code)
         logger.log_operation("checkout_branch", "error", diag["title"])
         return False, diag["message"], diag
 
@@ -580,7 +683,9 @@ class GitService:
                 msg = "Tu proyecto ya está completamente al día. No había cambios nuevos."
             return True, msg, {"raw": stdout}
 
-        diag = ErrorTranslator.translate(stderr, stdout, "git pull")
+        code = self.last_returncode
+        logger.error(f"Fallo en git pull (código {code}): {stderr}")
+        diag = ErrorTranslator.translate(stderr, stdout, "git pull", returncode=code)
         logger.log_operation("git pull", "error", diag["title"])
         return False, diag["message"], diag
 
@@ -638,8 +743,10 @@ class GitService:
 
         success, stdout, stderr = self.run_command(["add", "."], cwd=repo_path)
         if not success:
-            diag = ErrorTranslator.translate(stderr, stdout, "git add .")
-            logger.log_operation("git add .", "error", diag["title"])
+            code = self.last_returncode
+            logger.error(f"Fallo en backup (git add .): código={code}, stderr={stderr}, stdout={stdout}")
+            diag = ErrorTranslator.translate(stderr, stdout, "git add .", returncode=code)
+            logger.log_operation("git add .", "error", f"código {code}: {diag['title']}")
             return False, diag["message"], diag
 
         # Paso 4: git commit -m <clean_msg>
@@ -648,8 +755,10 @@ class GitService:
 
         success, stdout, stderr = self.run_command(["commit", "-m", clean_msg], cwd=repo_path)
         if not success:
-            diag = ErrorTranslator.translate(stderr, stdout, "git commit")
-            logger.log_operation("git commit", "error", diag["title"])
+            code = self.last_returncode
+            logger.error(f"Fallo en backup (git commit): código={code}, stderr={stderr}, stdout={stdout}")
+            diag = ErrorTranslator.translate(stderr, stdout, "git commit", returncode=code)
+            logger.log_operation("git commit", "error", f"código {code}: {diag['title']}")
             return False, diag["message"], diag
 
         # Paso 5: git push
@@ -662,8 +771,10 @@ class GitService:
 
         success, stdout, stderr = self.run_command(push_args, cwd=repo_path)
         if not success:
-            diag = ErrorTranslator.translate(stderr, stdout, f"git {' '.join(push_args)}")
-            logger.log_operation("git push", "error", diag["title"])
+            code = self.last_returncode
+            logger.error(f"Fallo en backup (git {' '.join(push_args)}): código={code}, stderr={stderr}, stdout={stdout}")
+            diag = ErrorTranslator.translate(stderr, stdout, f"git {' '.join(push_args)}", returncode=code)
+            logger.log_operation("git push", "error", f"código {code}: {diag['title']}")
             return False, diag["message"], diag
 
         if progress_callback:

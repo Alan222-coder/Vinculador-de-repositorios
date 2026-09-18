@@ -270,3 +270,33 @@ Todos los siguientes casos fueron implementados y verificados:
 - **Seguridad estricta contra pérdida de datos locales:**
   - Si un integrante del equipo subió cambios en los mismos archivos que el usuario tiene modificados localmente sin guardar, la aplicación detecta la colisión mediante `check_collaboration_status()` y **detiene la sincronización automática**.
   - Muestra un diálogo con la lista exacta de archivos en riesgo de choque y permite al usuario crear un backup previo de su versión antes de traer la versión remota, impidiendo cualquier sobrescritura destructiva.
+
+### [v1.2.0] - 2026-09-17
+
+#### 🚨 BLOQUE 1: Captura del Error Real de Git y Detección de Causas Típicas de Fallo
+- **Captura y visualización completa del error:**
+  - Se modificó el motor de ejecución para capturar siempre el **código de salida numérico** (`returncode`) y la salida completa de `stderr` de Git.
+  - En caso de fallo en `git commit` o backup, se registra con severidad `ERROR` en `logs/app.log` con todos los parámetros crudos: `Fallo en backup (git commit): código={code}, stderr={stderr}`.
+  - En la interfaz, se despliega una nueva ventana técnica visible (`_show_backup_error_dialog`) que muestra:
+    - Título específico y explicación simple en español escolar.
+    - Código de salida numérico visible (`Código de salida: 128`).
+    - Comando ejecutado (`git commit -m "..."`).
+    - Mensaje textual real reportado por Git (`stderr`).
+- **Detección de las 4 causas típicas con acciones directas:**
+  1. **Identidad no configurada (`missing_identity`):** Detecta `please tell me who you are`, `unable to auto-detect email address`, `author identity unknown`. Ofrece el botón directo **`[ ⚙️ Configurar Identidad de Git ]`**.
+  2. **Archivo bloqueado en Windows (`locked_file`):** Detecta `.git/index.lock`, `another git process seems to be running`, `device or resource busy`. Ofrece el botón directo **`[ 🔓 Limpiar Bloqueo index.lock ]`** que remueve de forma segura el archivo huérfano.
+  3. **Fusión o Rebase a medias (`merge_in_progress`):** Detecta `you have not concluded your merge`, `merge_head exists`, `cannot do a partial commit during a merge`. Ofrece el botón directo **`[ ↩️ Cancelar Fusión Inconclusa ]`** ejecutando `git merge --abort`.
+  4. **Conflictos sin resolver (`unresolved_conflicts`):** Detecta `fix conflicts and then commit`, `unmerged paths`. Explica cómo abrir los archivos y revisar marcas `<<<<<<<`.
+
+#### 🌿 BLOQUE 2: Crear Rama Nueva y Salida de Emergencia
+- **Botón `[ ➕ CREAR RAMA NUEVA ]`:**
+  - Incorporado en la pantalla principal del proyecto en la fila de gestión de ramas junto a `[ 🌿 CAMBIAR RAMA ]`.
+  - Abre el diálogo de creación que solicita el nombre, valida caracteres prohibidos en Git (sin espacios ni caracteres conflictivos como `:`, `~`, `^`).
+  - Ejecuta `git checkout -b <nombre>`, cambiando automáticamente a la nueva rama.
+  - **Preserva intactos todos los archivos modificados locales** para que el estudiante no pierda su trabajo.
+- **Salida de Emergencia y Publicación Remota:**
+  - Opción `[x] Subir rama a GitHub inmediatamente (git push -u origin <rama>)` para respaldar la rama en el servidor escolar.
+  - Opción `[x] Guardar también los cambios pendientes en esta nueva rama (backup de emergencia)` que ejecuta de inmediato el guardado en la nueva rama creada.
+- **Indicador de Rama Prominente:**
+  - La etiqueta `lbl_proj_branch` ahora se destaca en negrita y color cyan:
+    `🌿 Rama activa: <nombre>  (Parado aquí)` para claridad total en todo momento.

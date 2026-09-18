@@ -56,5 +56,38 @@ class TestErrorTranslator(unittest.TestCase):
         self.assertEqual(res["severity"], "warning")
 
 
+    def test_translate_missing_identity(self):
+        stderr = (
+            "Author identity unknown\n\n"
+            "*** Please tell me who you are.\n\n"
+            "Run\n\n"
+            "  git config --global user.email \"you@example.com\"\n"
+            "  git config --global user.name \"Your Name\"\n\n"
+            "fatal: unable to auto-detect email address (got 'User@PC.(none)')"
+        )
+        res = ErrorTranslator.translate(stderr=stderr, context_cmd="git commit", returncode=128)
+        self.assertIn("Identidad de Git no configurada", res["title"])
+        self.assertEqual(res["cause"], "missing_identity")
+        self.assertEqual(res["exit_code"], 128)
+        self.assertIn("Identidad Git y Ajustes", res["suggested_action"])
+
+    def test_translate_index_lock(self):
+        stderr = (
+            "fatal: Unable to create 'C:/project/.git/index.lock': File exists.\n"
+            "Another git process seems to be running in this repository"
+        )
+        res = ErrorTranslator.translate(stderr=stderr, context_cmd="git add .", returncode=128)
+        self.assertIn("index.lock", res["title"])
+        self.assertEqual(res["cause"], "locked_file")
+        self.assertIn("Limpiar Bloqueo", res["suggested_action"])
+
+    def test_translate_merge_in_progress(self):
+        stderr = "fatal: cannot do a partial commit during a merge.\nMerge_head exists."
+        res = ErrorTranslator.translate(stderr=stderr, context_cmd="git commit", returncode=1)
+        self.assertIn("Fusión (Merge)", res["title"])
+        self.assertEqual(res["cause"], "merge_in_progress")
+        self.assertIn("Cancelar Fusión", res["suggested_action"])
+
+
 if __name__ == "__main__":
     unittest.main()

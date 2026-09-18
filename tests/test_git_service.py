@@ -104,6 +104,43 @@ class TestGitService(unittest.TestCase):
             self.assertEqual(len(changes2), 1)
             self.assertIn("index.html", changes2[0])
 
+    def test_create_branch(self):
+        """Verifica la creación y cambio de rama sin perder cambios locales."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            subprocess.run(["git", "init"], cwd=temp_dir, capture_output=True, check=True)
+            subprocess.run(["git", "config", "user.name", "Alumno Test"], cwd=temp_dir, check=True)
+            subprocess.run(["git", "config", "user.email", "alumno@colegio.edu"], cwd=temp_dir, check=True)
+
+            # Primer commit inicial
+            with open(os.path.join(temp_dir, "archivo1.txt"), "w", encoding="utf-8") as f:
+                f.write("contenido inicial")
+            subprocess.run(["git", "add", "."], cwd=temp_dir, check=True)
+            subprocess.run(["git", "commit", "-m", "Commit inicial"], cwd=temp_dir, check=True)
+
+            # Crear rama nueva
+            succ, msg, diag = self.service.create_branch(temp_dir, "nueva-rama-test", checkout=True)
+            self.assertTrue(succ)
+            self.assertEqual(diag["branch"], "nueva-rama-test")
+
+            # Verificar que la rama activa sea la nueva
+            branches, current = self.service.get_branches(temp_dir)
+            self.assertEqual(current, "nueva-rama-test")
+            self.assertIn("nueva-rama-test", branches)
+
+    def test_cleanup_index_lock(self):
+        """Verifica la eliminación de un index.lock atascado."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            subprocess.run(["git", "init"], cwd=temp_dir, capture_output=True, check=True)
+            git_dir = os.path.join(temp_dir, ".git")
+            lock_file = os.path.join(git_dir, "index.lock")
+            with open(lock_file, "w") as f:
+                f.write("bloqueo simulado")
+
+            self.assertTrue(os.path.exists(lock_file))
+            succ, msg = self.service.cleanup_index_lock(temp_dir)
+            self.assertTrue(succ)
+            self.assertFalse(os.path.exists(lock_file))
+
 
 if __name__ == "__main__":
     unittest.main()

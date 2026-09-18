@@ -397,8 +397,14 @@ class GitManagerApp(ctk.CTk):
         )
         self.btn_backup.pack(fill="x", pady=5)
 
+        # Fila de gestión de ramas
+        self.branches_row = ctk.CTkFrame(self.actions_frame, fg_color="transparent")
+        self.branches_row.pack(fill="x", pady=5)
+        self.branches_row.columnconfigure(0, weight=1)
+        self.branches_row.columnconfigure(1, weight=1)
+
         self.btn_branch = ctk.CTkButton(
-            self.actions_frame,
+            self.branches_row,
             text="🌿  CAMBIAR RAMA",
             font=ctk.CTkFont(size=14, weight="bold"),
             height=44,
@@ -407,7 +413,19 @@ class GitManagerApp(ctk.CTk):
             hover_color="#334155",
             command=self._open_branch_dialog,
         )
-        self.btn_branch.pack(fill="x", pady=5)
+        self.btn_branch.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+
+        self.btn_create_branch = ctk.CTkButton(
+            self.branches_row,
+            text="➕  CREAR RAMA NUEVA",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            height=44,
+            corner_radius=10,
+            fg_color="#0369a1",
+            hover_color="#0284c7",
+            command=self._open_create_branch_dialog,
+        )
+        self.btn_create_branch.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
         # 7. FILA SECUNDARIA
         self.secondary_row = ctk.CTkFrame(self.actions_frame, fg_color="transparent")
@@ -543,8 +561,12 @@ class GitManagerApp(ctk.CTk):
                 elif is_repo:
                     self.lbl_proj_status.configure(text="🟢 Repositorio Git detectado y vinculado", text_color="#4ade80")
                     self.lbl_proj_path.configure(text=f"📁 Carpeta: {current_path}")
-                    self.lbl_proj_repo.configure(text=f"Repositorio: {repo_info.get('name')} ({repo_info.get('remote_url')})")
-                    self.lbl_proj_branch.configure(text=f"Rama actual: {repo_info.get('branch')}")
+                    current_b = repo_info.get("branch") or "main"
+                    self.lbl_proj_branch.configure(
+                        text=f"🌿 Rama activa: {current_b}  (Parado aquí)",
+                        text_color="#38bdf8",
+                        font=ctk.CTkFont(size=13, weight="bold"),
+                    )
                     if repo_info.get("is_clean"):
                         self.lbl_proj_sync.configure(text="✓ Estado: Todo actualizado", text_color="#4ade80")
                     else:
@@ -573,6 +595,8 @@ class GitManagerApp(ctk.CTk):
         self.btn_pull.configure(state=state)
         self.btn_backup.configure(state=state)
         self.btn_branch.configure(state=state)
+        if hasattr(self, "btn_create_branch"):
+            self.btn_create_branch.configure(state=state)
         self.btn_history.configure(state=state)
 
     def _set_busy(self, busy: bool, message: str = "") -> None:
@@ -1113,11 +1137,155 @@ class GitManagerApp(ctk.CTk):
                         is_error=True,
                         details=diag,
                     )
-                    messagebox.showwarning(diag.get("title", "Error"), diag.get("message", msg))
+                    self._show_backup_error_dialog(diag, msg)
 
             self.after(0, finish_ui)
 
         threading.Thread(target=task, daemon=True).start()
+
+    def _show_backup_error_dialog(self, diag: Dict[str, Any], default_msg: str) -> None:
+        """Muestra una ventana detallada con el error REAL de Git, código de salida y acción sugerida."""
+        project_path = config.get_project_path()
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Detalle del Error de Guardado")
+        dialog.geometry("640x520")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        title_text = diag.get("title", "⚠️ Error al crear backup")
+        lbl_title = ctk.CTkLabel(
+            dialog,
+            text=title_text,
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color="#f87171",
+            wraplength=600,
+            justify="left",
+        )
+        lbl_title.pack(anchor="w", padx=25, pady=(20, 8))
+
+        msg_text = diag.get("message", default_msg)
+        lbl_msg = ctk.CTkLabel(
+            dialog,
+            text=msg_text,
+            font=ctk.CTkFont(size=13),
+            wraplength=590,
+            justify="left",
+        )
+        lbl_msg.pack(anchor="w", padx=25, pady=(0, 10))
+
+        # Acción sugerida destacada
+        action_text = diag.get("suggested_action")
+        if action_text:
+            action_card = ctk.CTkFrame(dialog, corner_radius=8, fg_color="#1e293b")
+            action_card.pack(fill="x", padx=25, pady=(0, 10))
+            ctk.CTkLabel(
+                action_card,
+                text=f"💡 Acción sugerida:\n{action_text}",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color="#38bdf8",
+                wraplength=570,
+                justify="left",
+            ).pack(anchor="w", padx=12, pady=10)
+
+        # Caja técnica visible: Código de salida y mensaje de Git (stderr)
+        tech_frame = ctk.CTkFrame(dialog, corner_radius=8, fg_color="#0f172a")
+        tech_frame.pack(fill="both", expand=True, padx=25, pady=(0, 15))
+
+        exit_code = diag.get("exit_code")
+        cmd_run = diag.get("command", "")
+        top_meta = f"Código de salida: {exit_code if exit_code is not None else 'N/A'}"
+        if cmd_run:
+            top_meta += f"  |  Comando: {cmd_run}"
+
+        ctk.CTkLabel(
+            tech_frame,
+            text=top_meta,
+            font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+            text_color="#fbbf24",
+        ).pack(anchor="w", padx=12, pady=(8, 2))
+
+        txt_err = ctk.CTkTextbox(tech_frame, font=ctk.CTkFont(family="Consolas", size=11), height=110)
+        txt_err.pack(fill="both", expand=True, padx=12, pady=(4, 10))
+        raw_err = diag.get("stderr") or diag.get("raw") or "Sin mensaje de error reportado por Git."
+        txt_err.insert("1.0", raw_err)
+        txt_err.configure(state="disabled")
+
+        # Fila de botones según la causa del problema
+        btn_box = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_box.pack(fill="x", padx=25, pady=(0, 18))
+
+        cause = diag.get("cause")
+        if cause == "missing_identity":
+            ctk.CTkButton(
+                btn_box,
+                text="⚙️ Configurar Identidad de Git",
+                fg_color="#0284c7",
+                hover_color="#0369a1",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                height=36,
+                command=lambda: [dialog.destroy(), self._open_identity_dialog()],
+            ).pack(side="left", padx=(0, 8))
+
+        elif cause == "locked_file":
+            def do_clean_lock():
+                succ, lock_msg = git_service.cleanup_index_lock(project_path)
+                dialog.destroy()
+                if succ:
+                    messagebox.showinfo("Bloqueo Limpiado", lock_msg)
+                else:
+                    messagebox.showwarning("Error de Bloqueo", lock_msg)
+                self.refresh_all_status()
+
+            ctk.CTkButton(
+                btn_box,
+                text="🔓 Limpiar Bloqueo index.lock",
+                fg_color="#d97706",
+                hover_color="#b45309",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                height=36,
+                command=do_clean_lock,
+            ).pack(side="left", padx=(0, 8))
+
+        elif cause == "merge_in_progress":
+            def do_abort_merge():
+                succ, m_msg = git_service.abort_merge(project_path)
+                dialog.destroy()
+                if succ:
+                    messagebox.showinfo("Fusión Cancelada", m_msg)
+                else:
+                    messagebox.showwarning("Error", m_msg)
+                self.refresh_all_status()
+
+            ctk.CTkButton(
+                btn_box,
+                text="↩️ Cancelar Fusión Inconclusa",
+                fg_color="#dc2626",
+                hover_color="#b91c1c",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                height=36,
+                command=do_abort_merge,
+            ).pack(side="left", padx=(0, 8))
+
+        # Botón para crear rama de emergencia
+        ctk.CTkButton(
+            btn_box,
+            text="🌿 Crear Rama de Respaldo",
+            fg_color="#059669",
+            hover_color="#047857",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=36,
+            command=lambda: [dialog.destroy(), self._open_create_branch_dialog()],
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            btn_box,
+            text="Cerrar",
+            width=90,
+            height=36,
+            fg_color="#475569",
+            hover_color="#334155",
+            command=dialog.destroy,
+        ).pack(side="right")
 
     # ==================== SINCRONIZACIÓN EN VIVO (BLOQUE 2) ====================
 
@@ -1366,6 +1534,168 @@ class GitManagerApp(ctk.CTk):
             hover_color="#0369a1",
             command=switch,
         ).pack(pady=15)
+
+    # ==================== CREAR RAMA NUEVA (BLOQUE 2) ====================
+
+    def _open_create_branch_dialog(self) -> None:
+        """Abre el diálogo para crear una rama nueva y opcionalmente publicarla a GitHub."""
+        project_path = config.get_project_path()
+        if not git_service.is_git_repository(project_path):
+            messagebox.showwarning("Proyecto no válido", "Por favor selecciona una carpeta de proyecto válida.")
+            return
+
+        branches, current_branch = git_service.get_branches(project_path)
+        has_changes, changes = git_service.has_local_changes(project_path)
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Crear Rama Nueva")
+        dialog.geometry("540x480")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        ctk.CTkLabel(dialog, text="➕ CREAR RAMA NUEVA", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(16, 4))
+        ctk.CTkLabel(
+            dialog,
+            text=f"Se creará a partir de la rama actual: {current_branch}",
+            font=ctk.CTkFont(size=13),
+            text_color="#38bdf8",
+        ).pack(pady=(0, 12))
+
+        # Campo nombre de rama
+        ctk.CTkLabel(dialog, text="Nombre de la nueva rama:", font=ctk.CTkFont(size=13, weight="bold"), anchor="w").pack(fill="x", padx=35, pady=(4, 2))
+        txt_branch = ctk.CTkEntry(
+            dialog,
+            placeholder_text="ej: mi-rama-trabajo, feature-login, respaldo-emergencia",
+            height=40,
+            font=ctk.CTkFont(size=13),
+        )
+        txt_branch.pack(fill="x", padx=35, pady=(0, 8))
+        txt_branch.focus_set()
+
+        # Opciones avanzadas
+        chk_push_var = tk.BooleanVar(value=True)
+        chk_push = ctk.CTkCheckBox(
+            dialog,
+            text="Subir rama a GitHub inmediatamente (git push -u origin <rama>)",
+            variable=chk_push_var,
+            font=ctk.CTkFont(size=12),
+        )
+        chk_push.pack(anchor="w", padx=35, pady=6)
+
+        chk_backup_var = tk.BooleanVar(value=has_changes)
+        chk_backup = ctk.CTkCheckBox(
+            dialog,
+            text=f"Guardar también los cambios pendientes en esta nueva rama ({len(changes)} archivo(s))",
+            variable=chk_backup_var,
+            font=ctk.CTkFont(size=12),
+        )
+        if has_changes:
+            chk_backup.pack(anchor="w", padx=35, pady=6)
+
+        txt_commit_msg = ctk.CTkEntry(
+            dialog,
+            placeholder_text="Descripción del guardado (ej: Respaldo de emergencia en rama nueva)",
+            height=36,
+            font=ctk.CTkFont(size=12),
+        )
+        txt_commit_msg.insert(0, f"Respaldo de trabajo en rama nueva desde {current_branch}")
+
+        def toggle_backup_entry():
+            if chk_backup_var.get():
+                txt_commit_msg.pack(fill="x", padx=35, pady=(2, 6))
+            else:
+                txt_commit_msg.pack_forget()
+
+        chk_backup.configure(command=toggle_backup_entry)
+        if has_changes:
+            toggle_backup_entry()
+
+        lbl_error = ctk.CTkLabel(dialog, text="", font=ctk.CTkFont(size=12), text_color="#f87171")
+        lbl_error.pack(pady=4)
+
+        buttons_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        buttons_frame.pack(fill="x", padx=35, pady=12)
+        buttons_frame.columnconfigure(0, weight=1)
+        buttons_frame.columnconfigure(1, weight=1)
+
+        ctk.CTkButton(
+            buttons_frame,
+            text="[ CANCELAR ]",
+            height=42,
+            fg_color="#475569",
+            hover_color="#334155",
+            command=dialog.destroy,
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+
+        def execute_create():
+            name = txt_branch.get().strip()
+            if not name:
+                lbl_error.configure(text="Debes ingresar un nombre para la rama.")
+                return
+            if " " in name:
+                lbl_error.configure(text="El nombre no puede tener espacios. Usa guiones medios '-' o bajos '_'.")
+                return
+
+            do_backup = chk_backup_var.get() and has_changes
+            commit_text = txt_commit_msg.get().strip() if do_backup else ""
+            if do_backup and not commit_text:
+                lbl_error.configure(text="Escribe una breve descripción para el backup de la rama.")
+                return
+
+            push_remote = chk_push_var.get()
+
+            dialog.destroy()
+            self._set_busy(True, f"Creando y cambiando a la rama '{name}'...")
+
+            def task():
+                succ, msg, diag = git_service.create_branch(
+                    repo_path=project_path,
+                    branch_name=name,
+                    checkout=True,
+                    push_upstream=push_remote,
+                )
+
+                if succ and do_backup:
+                    self.after(0, lambda: self.lbl_progress_status.configure(text=f"Guardando cambios en '{name}'..."))
+                    succ_b, msg_b, diag_b = git_service.create_backup(
+                        repo_path=project_path,
+                        message=commit_text,
+                    )
+                    if not succ_b:
+                        msg += f"\n\n⚠️ La rama fue creada pero el backup falló: {msg_b}"
+
+                def finish_ui():
+                    self._set_busy(False)
+                    self.refresh_all_status()
+                    if succ:
+                        self._set_operation_result(f"✅ Rama '{name}' creada y seleccionada.", details=diag)
+                        messagebox.showinfo(
+                            "✅ Rama Creada con Éxito",
+                            f"¡Ahora estás trabajando en la nueva rama '{name}'!\n\n"
+                            f"• Rama base anterior: {current_branch}\n"
+                            f"• Rama activa actual: {name}\n"
+                            + ("• Subida a GitHub: Sí\n" if push_remote else "• Subida a GitHub: No (solo local)\n")
+                            + (f"• Backup guardado: \"{commit_text}\"" if do_backup else "")
+                        )
+                    else:
+                        self._set_operation_result(f"⚠️ Error al crear rama: {msg}", is_error=True, details=diag)
+                        messagebox.showwarning(diag.get("title", "Error al crear rama"), diag.get("message", msg))
+
+                self.after(0, finish_ui)
+
+            threading.Thread(target=task, daemon=True).start()
+
+        ctk.CTkButton(
+            buttons_frame,
+            text="[ CREAR RAMA ]",
+            height=42,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#0284c7",
+            hover_color="#0369a1",
+            command=execute_create,
+        ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
+        txt_branch.bind("<Return>", lambda event: execute_create())
 
     # ==================== OPERACIONES: HISTORIAL ====================
 
