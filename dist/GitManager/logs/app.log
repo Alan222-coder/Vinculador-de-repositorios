@@ -22,3 +22,21 @@
 2026-09-17 21:33:49 [INFO] Ejecutando: git add . en cwd=C:\Users\Alanf\Downloads\Herramienta Git
 2026-09-17 21:33:53 [INFO] Ejecutando: git commit -m Primer backup del proyecto escolar en cwd=C:\Users\Alanf\Downloads\Herramienta Git
 2026-09-17 21:33:53 [INFO] Ejecutando: git push -u origin main en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:57 [INFO] Ejecutando: git credential-manager github list en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:57 [INFO] Ejecutando: git config user.name en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:57 [INFO] Ejecutando: git config user.email en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:00 [INFO] Operación: link_project | Resultado: correcto | Detalles: Carpeta: C:\Users\Alanf\Downloads\Herramienta Git -> https://github.com/Alan222-coder/Vinculador-de-repositorios.git
+2026-09-17 21:34:00 [INFO] Ejecutando: git --version en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:09 [INFO] Ejecutando: git --version en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:09 [INFO] Ejecutando: git credential-manager github list en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:09 [INFO] Ejecutando: git branch --show-current en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:09 [INFO] Ejecutando: git remote get-url origin en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:09 [INFO] Ejecutando: git status --porcelain en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:18 [INFO] Ejecutando: git status --porcelain en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:49 [INFO] Ejecutando: git status --porcelain en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:49 [INFO] Ejecutando: git add . en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:49 [INFO] Ejecutando: git commit -m Prueba 1 Backup en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:49 [INFO] Ejecutando: git branch --show-current en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:49 [INFO] Ejecutando: git remote get-url origin en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:49 [INFO] Ejecutando: git status --porcelain en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:34:49 [INFO] Ejecutando: git push origin main en cwd=C:\Users\Alanf\Downloads\Herramienta Git
