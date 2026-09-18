@@ -2,3 +2,23 @@
 2026-09-17 21:31:18 [INFO] === Iniciando Git Manager ===
 2026-09-17 21:31:18 [INFO] Ejecutando: git --version en cwd=C:\Users\Alanf\Downloads\Herramienta Git
 2026-09-17 21:31:18 [INFO] Ejecutando: git credential-manager github list en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:31:30 [INFO] Ejecutando: git --version en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:31:30 [INFO] Ejecutando: git credential-manager github list en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:31:37 [INFO] Ejecutando: git credential-manager github list en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:31:37 [INFO] Ejecutando: git config user.name en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:31:37 [INFO] Ejecutando: git config user.email en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:49 [INFO] Ejecutando: git config user.name Alan222-coder en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:49 [WARNING] Git falló (código 128): fatal: not in a git directory
+2026-09-17 21:33:49 [INFO] Ejecutando: git config user.email alanfenix222@gmail.com en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:49 [WARNING] Git falló (código 128): fatal: not in a git directory
+2026-09-17 21:33:49 [INFO] Ejecutando: git init en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:49 [INFO] Repositorio Git inicializado en: C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:49 [INFO] Ejecutando: git branch -M main en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:49 [INFO] Ejecutando: git remote get-url origin en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:49 [WARNING] Git falló (código 2): error: No such remote 'origin'
+2026-09-17 21:33:49 [INFO] Ejecutando: git remote add origin https://github.com/Alan222-coder/Vinculador-de-repositorios.git en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:49 [INFO] Ejecutando: git remote -v en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:49 [INFO] Ejecutando: git status --porcelain en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:49 [INFO] Ejecutando: git add . en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:53 [INFO] Ejecutando: git commit -m Primer backup del proyecto escolar en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:33:53 [INFO] Ejecutando: git push -u origin main en cwd=C:\Users\Alanf\Downloads\Herramienta Git
