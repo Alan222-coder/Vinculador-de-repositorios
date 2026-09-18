@@ -1,0 +1,18 @@
+# Logs de ejecución de Git Manager
+logs/
+*.log
+dist/GitManager/logs/
+
+# Carpetas de compilación y empaquetado
+dist/
+build/
+*.spec
+
+# Archivos de sesión cifrada y temporales
+config/session.dat
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.env
+.env.*
