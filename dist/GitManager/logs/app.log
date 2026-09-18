@@ -1,0 +1,4 @@
+2026-09-17 21:31:18 [INFO] Git del sistema detectado en: C:\Program Files\Git\cmd\git.EXE
+2026-09-17 21:31:18 [INFO] === Iniciando Git Manager ===
+2026-09-17 21:31:18 [INFO] Ejecutando: git --version en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:31:18 [INFO] Ejecutando: git credential-manager github list en cwd=C:\Users\Alanf\Downloads\Herramienta Git

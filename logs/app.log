@@ -1,0 +1,58 @@
+2026-09-17 21:14:24 [INFO] Git del sistema detectado en: C:\Program Files\Git\cmd\git.EXE
+2026-09-17 21:14:24 [INFO] Git del sistema detectado en: C:\Program Files\Git\cmd\git.EXE
+2026-09-17 21:14:24 [INFO] Git del sistema detectado en: C:\Program Files\Git\cmd\git.EXE
+2026-09-17 21:14:24 [INFO] Ejecutando: git --version en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:14:24 [INFO] Git del sistema detectado en: C:\Program Files\Git\cmd\git.EXE
+2026-09-17 21:14:24 [INFO] Ejecutando: git status --porcelain en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpdm4j40uz
+2026-09-17 21:14:24 [INFO] Ejecutando: git add . en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpdm4j40uz
+2026-09-17 21:14:25 [INFO] Ejecutando: git commit -m Prueba "con comillas", tildes: áéíóú ñ, símbolos: $VAR & | ; `dir` && echo 123 en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpdm4j40uz
+2026-09-17 21:14:25 [INFO] Ejecutando: git branch --show-current en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpdm4j40uz
+2026-09-17 21:14:25 [INFO] Ejecutando: git remote get-url origin en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpdm4j40uz
+2026-09-17 21:14:25 [WARNING] Git falló (código 2): error: No such remote 'origin'
+2026-09-17 21:14:25 [INFO] Ejecutando: git status --porcelain en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpdm4j40uz
+2026-09-17 21:14:25 [INFO] Ejecutando: git push en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpdm4j40uz
+2026-09-17 21:14:25 [WARNING] Git falló (código 128): fatal: No configured push destination.
+Either specify the URL from the command-line or configure a remote repository using
+
+    git remote add <name> <url>
+
+and then push using the remote name
+
+    git push <name>
+2026-09-17 21:14:25 [INFO] Operación: git push | Resultado: error | Detalles: ⚠️ Error en la operación
+2026-09-17 21:14:25 [INFO] Ejecutando: git log -1 --format=%s en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpdm4j40uz
+2026-09-17 21:29:14 [INFO] Git del sistema detectado en: C:\Program Files\Git\cmd\git.EXE
+2026-09-17 21:29:14 [INFO] Git del sistema detectado en: C:\Program Files\Git\cmd\git.EXE
+2026-09-17 21:29:14 [INFO] Git del sistema detectado en: C:\Program Files\Git\cmd\git.EXE
+2026-09-17 21:29:14 [INFO] Ejecutando: git --version en cwd=C:\Users\Alanf\Downloads\Herramienta Git
+2026-09-17 21:29:14 [INFO] Git del sistema detectado en: C:\Program Files\Git\cmd\git.EXE
+2026-09-17 21:29:14 [INFO] Ejecutando: git init en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpa8h6g97u
+2026-09-17 21:29:14 [INFO] Repositorio Git inicializado en: C:\Users\Alanf\AppData\Local\Temp\tmpa8h6g97u
+2026-09-17 21:29:14 [INFO] Ejecutando: git remote get-url origin en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpa8h6g97u
+2026-09-17 21:29:15 [WARNING] Git falló (código 2): error: No such remote 'origin'
+2026-09-17 21:29:15 [INFO] Ejecutando: git remote add origin https://github.com/UsuarioColegio/ProyectoTest.git en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpa8h6g97u
+2026-09-17 21:29:15 [INFO] Ejecutando: git remote -v en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpa8h6g97u
+2026-09-17 21:29:15 [INFO] Ejecutando: git config user.name Estudiante A en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpa8h6g97u
+2026-09-17 21:29:15 [INFO] Ejecutando: git config user.email estudiante@escuela.edu en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpa8h6g97u
+2026-09-17 21:29:15 [INFO] Identidad Git configurada: Estudiante A <estudiante@escuela.edu> (global=False)
+2026-09-17 21:29:15 [INFO] Ejecutando: git config user.name en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpa8h6g97u
+2026-09-17 21:29:15 [INFO] Ejecutando: git config user.email en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpa8h6g97u
+2026-09-17 21:29:15 [INFO] Git del sistema detectado en: C:\Program Files\Git\cmd\git.EXE
+2026-09-17 21:29:15 [INFO] Ejecutando: git status --porcelain en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpp9092ino
+2026-09-17 21:29:15 [INFO] Ejecutando: git add . en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpp9092ino
+2026-09-17 21:29:15 [INFO] Ejecutando: git commit -m Prueba "con comillas", tildes: áéíóú ñ, símbolos: $VAR & | ; `dir` && echo 123 en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpp9092ino
+2026-09-17 21:29:15 [INFO] Ejecutando: git branch --show-current en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpp9092ino
+2026-09-17 21:29:15 [INFO] Ejecutando: git remote get-url origin en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpp9092ino
+2026-09-17 21:29:15 [WARNING] Git falló (código 2): error: No such remote 'origin'
+2026-09-17 21:29:15 [INFO] Ejecutando: git status --porcelain en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpp9092ino
+2026-09-17 21:29:15 [INFO] Ejecutando: git push en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpp9092ino
+2026-09-17 21:29:15 [WARNING] Git falló (código 128): fatal: No configured push destination.
+Either specify the URL from the command-line or configure a remote repository using
+
+    git remote add <name> <url>
+
+and then push using the remote name
+
+    git push <name>
+2026-09-17 21:29:15 [INFO] Operación: git push | Resultado: error | Detalles: ⚠️ Error en la operación
+2026-09-17 21:29:15 [INFO] Ejecutando: git log -1 --format=%s en cwd=C:\Users\Alanf\AppData\Local\Temp\tmpp9092ino
