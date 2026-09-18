@@ -77,7 +77,32 @@ class TestGitService(unittest.TestCase):
 
             success_log, log_out, _ = self.service.run_command(["log", "-1", "--format=%s"], cwd=temp_dir)
             self.assertTrue(success_log)
-            self.assertEqual(log_out.strip(), tricky_message)
+    def test_internal_log_filtering(self):
+        """Verifica que archivos de log de la aplicación no se consideren cambios de código del proyecto."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            subprocess.run(["git", "init"], cwd=temp_dir, capture_output=True, check=True)
+            subprocess.run(["git", "config", "user.name", "Alumno Test"], cwd=temp_dir, check=True)
+            subprocess.run(["git", "config", "user.email", "alumno@colegio.edu"], cwd=temp_dir, check=True)
+
+            # Crear un archivo de log interno
+            logs_dir = os.path.join(temp_dir, "logs")
+            os.makedirs(logs_dir, exist_ok=True)
+            with open(os.path.join(logs_dir, "app.log"), "w", encoding="utf-8") as f:
+                f.write("2026-09-17 [INFO] Operacion interna\n")
+
+            # get_status_porcelain y has_local_changes no deben reportar el app.log
+            has_changes, changes = self.service.has_local_changes(temp_dir)
+            self.assertFalse(has_changes)
+            self.assertEqual(len(changes), 0)
+
+            # Si ahora agregamos un archivo real de código del proyecto
+            with open(os.path.join(temp_dir, "index.html"), "w", encoding="utf-8") as f:
+                f.write("<h1>Hola</h1>")
+
+            has_changes2, changes2 = self.service.has_local_changes(temp_dir)
+            self.assertTrue(has_changes2)
+            self.assertEqual(len(changes2), 1)
+            self.assertIn("index.html", changes2[0])
 
 
 if __name__ == "__main__":

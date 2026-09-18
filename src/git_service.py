@@ -187,8 +187,9 @@ class GitService:
             repo_name = clean_url.split("/")[-1] or repo_name
 
         # 4. Estado de cambios locales
-        success, status_out, _ = self.run_command(["status", "--porcelain"], cwd=repo_path)
-        is_clean = len(status_out.strip()) == 0
+        # 4. Estado de cambios locales (usando filtro de archivos internos)
+        status_lines = self.get_status_porcelain(repo_path)
+        is_clean = len(status_lines) == 0
 
         return {
             "is_repo": True,
@@ -396,16 +397,133 @@ class GitService:
         }
 
     def get_status_porcelain(self, repo_path: str) -> List[str]:
-        """Obtiene las líneas de archivos modificados/nuevos."""
+        """Obtiene las líneas de archivos modificados/nuevos filtrando archivos de log internos."""
         success, stdout, _ = self.run_command(["status", "--porcelain"], cwd=repo_path)
         if not success or not stdout:
             return []
-        return [line for line in stdout.splitlines() if line.strip()]
+
+        filtered = []
+        for line in stdout.splitlines():
+            line_str = line.strip()
+            if not line_str or len(line_str) < 3:
+                continue
+            file_part = line_str[2:].strip().strip('"\'')
+            if " -> " in file_part:
+                _, file_part = file_part.split(" -> ", 1)
+            file_norm = os.path.normpath(file_part).lower()
+
+            # Excluir logs de la propia aplicación y artefactos de compilación interna
+            if (
+                file_norm.endswith(".log")
+                or "logs" in file_norm.split(os.sep)
+                or "session.dat" in file_norm
+                or file_norm.startswith("dist" + os.sep)
+                or file_norm.startswith("build" + os.sep)
+                or "__pycache__" in file_norm
+            ):
+                continue
+            filtered.append(line_str)
+        return filtered
 
     def has_local_changes(self, repo_path: str) -> Tuple[bool, List[str]]:
-        """Comprueba si hay cambios locales sin guardar."""
+        """Comprueba si hay cambios locales sin guardar en el código del proyecto."""
         lines = self.get_status_porcelain(repo_path)
         return len(lines) > 0, lines
+
+    def fetch_remote(self, repo_path: str) -> Tuple[bool, str]:
+        """Realiza un git fetch origin para consultar cambios en GitHub sin tocar archivos locales."""
+        success, stdout, stderr = self.run_command(["fetch", "origin"], cwd=repo_path, timeout=30)
+        return success, stderr or stdout
+
+    def get_incoming_remote_commits(self, repo_path: str, branch: Optional[str] = None) -> List[Dict[str, str]]:
+        """Obtiene la lista de commits en el remoto que aún no están en la rama local."""
+        if not branch:
+            info = self.get_repo_info(repo_path)
+            branch = info.get("branch", "main")
+
+        # Formato: hash | autor | tiempo relativo | mensaje
+        fmt = "%h|%an|%cr|%s"
+        succ, stdout, _ = self.run_command(
+            ["log", f"HEAD..origin/{branch}", f"--format={fmt}"],
+            cwd=repo_path,
+        )
+        if not succ or not stdout.strip():
+            return []
+
+        commits = []
+        for line in stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split("|", 3)
+            if len(parts) == 4:
+                commits.append({
+                    "hash": parts[0].strip(),
+                    "author": parts[1].strip(),
+                    "time_ago": parts[2].strip(),
+                    "message": parts[3].strip(),
+                })
+        return commits
+
+    def get_incoming_remote_files(self, repo_path: str, branch: Optional[str] = None) -> List[str]:
+        """Obtiene la lista de archivos que fueron modificados en el remoto."""
+        if not branch:
+            info = self.get_repo_info(repo_path)
+            branch = info.get("branch", "main")
+
+        succ, stdout, _ = self.run_command(
+            ["diff", "--name-only", f"HEAD..origin/{branch}"],
+            cwd=repo_path,
+        )
+        if not succ or not stdout.strip():
+            return []
+
+        return [f.strip() for f in stdout.splitlines() if f.strip()]
+
+    def check_collaboration_status(self, repo_path: str) -> Dict[str, Any]:
+        """Comprueba si otros miembros del equipo subieron cambios a GitHub y evalúa riesgos de conflicto."""
+        if not self.is_git_repository(repo_path):
+            return {"has_incoming": False, "count": 0, "commits": [], "has_conflict_risk": False, "conflicting_files": []}
+
+        info = self.get_repo_info(repo_path)
+        if not info.get("has_remote"):
+            return {"has_incoming": False, "count": 0, "commits": [], "has_conflict_risk": False, "conflicting_files": []}
+
+        branch = info.get("branch", "main")
+
+        # 1. Fetch silencioso
+        self.fetch_remote(repo_path)
+
+        # 2. Consultar commits entrantes
+        incoming = self.get_incoming_remote_commits(repo_path, branch)
+        if not incoming:
+            return {"has_incoming": False, "count": 0, "commits": [], "has_conflict_risk": False, "conflicting_files": []}
+
+        # 3. Comprobar colisión con cambios locales no guardados
+        has_local, local_lines = self.has_local_changes(repo_path)
+        local_files = []
+        for l in local_lines:
+            f = l[2:].strip().strip('"\'')
+            if " -> " in f:
+                _, f = f.split(" -> ", 1)
+            local_files.append(os.path.normpath(f).lower())
+
+        remote_files = [os.path.normpath(f).lower() for f in self.get_incoming_remote_files(repo_path, branch)]
+
+        # Archivos que chocan: están modificados localmente Y modificados en el remoto
+        conflicting = [f for f in local_files if f in remote_files]
+
+        latest = incoming[0]
+        return {
+            "has_incoming": True,
+            "count": len(incoming),
+            "latest_author": latest["author"],
+            "latest_time": latest["time_ago"],
+            "latest_message": latest["message"],
+            "commits": incoming,
+            "has_conflict_risk": len(conflicting) > 0,
+            "conflicting_files": conflicting,
+        }
 
     def get_branches(self, repo_path: str) -> Tuple[List[str], str]:
         """Obtiene la lista de ramas locales y la rama actual."""

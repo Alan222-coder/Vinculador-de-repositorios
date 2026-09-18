@@ -49,9 +49,11 @@ class GitManagerApp(ctk.CTk):
         self.cached_git_info = {"available": False, "version": ""}
         self.cached_auth_info = {"is_authenticated": False, "username": ""}
         self.cached_repo_info = {"is_repo": False}
+        self.last_collab_status: Dict[str, Any] = {}
 
         self._build_ui()
         self.after(200, self._initial_check)
+        self.after(4000, self._start_live_sync_loop)
 
     def _set_app_icon(self) -> None:
         try:
@@ -283,7 +285,74 @@ class GitManagerApp(ctk.CTk):
         self.btn_clone_repo.grid(row=0, column=1, sticky="ew", padx=(6, 0))
         self.not_linked_actions_frame.pack_forget()
 
-        # 5. BARRA DE PROGRESO GLOBAL
+        # 5. BLOQUE DE COLABORACIÓN Y SINCRONIZACIÓN EN VIVO (EQUIPO)
+        self.collab_card = ctk.CTkFrame(self.main_container, corner_radius=10, fg_color="#1e293b")
+        self.collab_card.pack(fill="x", pady=6, padx=5)
+
+        self.collab_top_row = ctk.CTkFrame(self.collab_card, fg_color="transparent")
+        self.collab_top_row.pack(fill="x", padx=15, pady=(8, 4))
+
+        ctk.CTkLabel(
+            self.collab_top_row,
+            text="👥 Sincronización de Equipo en Vivo",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color="#94a3b8",
+        ).pack(side="left")
+
+        self.btn_check_collab = ctk.CTkButton(
+            self.collab_top_row,
+            text="🔄 Buscar cambios de otros",
+            height=26,
+            width=180,
+            fg_color="#3b82f6",
+            hover_color="#2563eb",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._manual_check_live_sync,
+        )
+        self.btn_check_collab.pack(side="right")
+
+        # Banner de alerta cuando hay commits entrantes
+        self.collab_alert_box = ctk.CTkFrame(self.collab_card, corner_radius=8, fg_color="#0f172a")
+        self.collab_alert_box.pack(fill="x", padx=12, pady=(4, 10))
+
+        self.lbl_collab_notice = ctk.CTkLabel(
+            self.collab_alert_box,
+            text="✓ Tu copia está al día con el repositorio remoto.",
+            font=ctk.CTkFont(size=12),
+            text_color="#4ade80",
+            anchor="w",
+            wraplength=640,
+            justify="left",
+        )
+        self.lbl_collab_notice.pack(fill="x", padx=12, pady=(6, 6))
+
+        self.collab_actions_row = ctk.CTkFrame(self.collab_alert_box, fg_color="transparent")
+        self.collab_actions_row.pack(fill="x", padx=12, pady=(0, 8))
+
+        self.btn_pull_incoming = ctk.CTkButton(
+            self.collab_actions_row,
+            text="📥 Traer cambios del equipo",
+            height=30,
+            fg_color="#10b981",
+            hover_color="#059669",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._pull_incoming_changes,
+        )
+        self.btn_pull_incoming.pack(side="left", padx=(0, 8))
+
+        self.btn_view_incoming = ctk.CTkButton(
+            self.collab_actions_row,
+            text="Ver detalles de los cambios",
+            height=30,
+            fg_color="#475569",
+            hover_color="#334155",
+            font=ctk.CTkFont(size=11),
+            command=self._show_incoming_details,
+        )
+        self.btn_view_incoming.pack(side="left")
+        self.collab_actions_row.pack_forget()
+
+        # 6. BARRA DE PROGRESO GLOBAL
         self.progress_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
         self.progress_frame.pack(fill="x", pady=4, padx=5)
 
@@ -300,7 +369,7 @@ class GitManagerApp(ctk.CTk):
         self.progress_bar.pack(fill="x", pady=4)
         self.progress_frame.pack_forget()
 
-        # 6. BOTONES DE ACCIÓN PRINCIPAL (Operaciones diarias)
+        # 7. BOTONES DE ACCIÓN PRINCIPAL (Operaciones diarias)
         self.actions_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
         self.actions_frame.pack(fill="x", pady=10, padx=5)
 
@@ -1017,6 +1086,9 @@ class GitManagerApp(ctk.CTk):
 
             def finish_ui():
                 self._set_busy(False)
+                # Refrescar de inmediato TODAS las pantallas antes de desplegar cualquier alerta modal
+                self.refresh_all_status()
+
                 if success:
                     auth_info = github_auth.get_auth_status(project_path)
                     user_name = auth_info.get("username", "Usuario")
@@ -1043,9 +1115,172 @@ class GitManagerApp(ctk.CTk):
                     )
                     messagebox.showwarning(diag.get("title", "Error"), diag.get("message", msg))
 
-                self.refresh_all_status()
-
             self.after(0, finish_ui)
+
+        threading.Thread(target=task, daemon=True).start()
+
+    # ==================== SINCRONIZACIÓN EN VIVO (BLOQUE 2) ====================
+
+    def _start_live_sync_loop(self) -> None:
+        """Ciclo periódico de comprobación en vivo de cambios remotos en GitHub."""
+        try:
+            self._run_live_sync_check(show_clean_notice=False)
+        finally:
+            # Repetir automáticamente cada 90 segundos
+            self.after(90000, self._start_live_sync_loop)
+
+    def _manual_check_live_sync(self) -> None:
+        """Comprobación manual de cambios al pulsar el botón 'Buscar cambios de otros'."""
+        self._set_operation_result("Consultando cambios recientes en GitHub...")
+        self._run_live_sync_check(show_clean_notice=True)
+
+    def _run_live_sync_check(self, show_clean_notice: bool = False) -> None:
+        """Ejecuta en segundo plano la consulta de cambios del equipo."""
+        project_path = config.get_project_path()
+        if not git_service.is_git_repository(project_path):
+            return
+
+        def task():
+            status = git_service.check_collaboration_status(project_path)
+            self.last_collab_status = status
+
+            def update_collab_ui():
+                if status.get("has_incoming"):
+                    author = status.get("latest_author", "Un compañero")
+                    time_ago = status.get("latest_time", "hace poco")
+                    msg = status.get("latest_message", "")
+                    count = status.get("count", 1)
+
+                    notice_text = (
+                        f"🔔 ¡Hay {count} cambio(s) nuevo(s) de {author} ({time_ago}) en GitHub!\n"
+                        f"Mensaje: \"{msg}\""
+                    )
+                    self.lbl_collab_notice.configure(
+                        text=notice_text,
+                        text_color="#fbbf24" if not status.get("has_conflict_risk") else "#f87171",
+                    )
+                    self.btn_pull_incoming.configure(
+                        text=f"📥 Traer cambios de {author} ({count})"
+                    )
+                    self.collab_actions_row.pack(fill="x", padx=12, pady=(0, 8))
+                    self._set_operation_result(f"Hay {count} cambio(s) nuevo(s) en GitHub de {author}.")
+                else:
+                    self.lbl_collab_notice.configure(
+                        text="✓ Tu copia está al día con el repositorio remoto.",
+                        text_color="#4ade80",
+                    )
+                    self.collab_actions_row.pack_forget()
+                    if show_clean_notice:
+                        self._set_operation_result("Todo actualizado: ningún compañero ha subido cambios nuevos.")
+
+            self.after(0, update_collab_ui)
+
+        threading.Thread(target=task, daemon=True).start()
+
+    def _show_incoming_details(self) -> None:
+        """Abre un modal mostrando quién hizo cada commit remoto y cuándo."""
+        commits = self.last_collab_status.get("commits", [])
+        if not commits:
+            messagebox.showinfo("Sin cambios", "No hay cambios pendientes por descargar.")
+            return
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Cambios Nuevos en GitHub")
+        dialog.geometry("620x460")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        ctk.CTkLabel(
+            dialog,
+            text="👥 CAMBIOS REALIZADOS POR TU EQUIPO",
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(pady=(15, 6))
+
+        scroll = ctk.CTkScrollableFrame(dialog)
+        scroll.pack(fill="both", expand=True, padx=20, pady=10)
+
+        for c in commits:
+            item = ctk.CTkFrame(scroll, corner_radius=8)
+            item.pack(fill="x", pady=4, padx=5)
+
+            ctk.CTkLabel(
+                item,
+                text=c["message"],
+                font=ctk.CTkFont(size=13, weight="bold"),
+                anchor="w",
+                wraplength=520,
+            ).pack(anchor="w", padx=12, pady=(6, 2))
+
+            ctk.CTkLabel(
+                item,
+                text=f"👤 Autor: {c['author']}  •  🕒 {c['time_ago']}  •  ID: {c['hash']}",
+                font=ctk.CTkFont(size=11),
+                text_color="gray60",
+                anchor="w",
+            ).pack(anchor="w", padx=12, pady=(0, 6))
+
+        ctk.CTkButton(dialog, text="Cerrar", width=100, command=dialog.destroy).pack(pady=10)
+
+    def _pull_incoming_changes(self) -> None:
+        """Descarga de forma segura los cambios del equipo con detección estricta de conflictos."""
+        project_path = config.get_project_path()
+        status = self.last_collab_status
+
+        # REGLA DE SEGURIDAD CRÍTICA (Bloque 2):
+        # Si hay archivos en conflicto potencial (modificados localmente Y en el remoto)
+        if status.get("has_conflict_risk"):
+            conflicting = status.get("conflicting_files", [])
+            file_list_str = "\n".join([f"  • {f}" for f in conflicting[:8]])
+
+            warn_msg = (
+                "⚠️ ¡ATENCIÓN: POSIBLE CONFLICTO DE ARCHIVOS!\n\n"
+                "Tú y tu compañero modificaron los mismos archivos sin guardar:\n\n"
+                f"{file_list_str}\n\n"
+                "Para no sobrescribir ni perder tus cambios locales:\n"
+                "1. Primero haz clic en 'Guardar mi versión' para crear un backup local.\n"
+                "2. Luego podrás fusionar los cambios de forma segura.\n\n"
+                "¿Deseas crear un backup de tu versión ahora?"
+            )
+            confirm_backup = messagebox.askyesno("Conflicto Detectado", warn_msg)
+            if confirm_backup:
+                self._open_backup_dialog()
+            return
+
+        # Si el usuario tiene cambios locales propios que no chocan, advertir amigablemente
+        has_local, local_files = git_service.has_local_changes(project_path)
+        if has_local:
+            confirm = messagebox.askyesno(
+                "Cambios locales",
+                "Tienes archivos modificados en tu proyecto.\n\n"
+                "¿Deseas descargar los cambios del equipo e integrarlos con tus archivos?",
+            )
+            if not confirm:
+                return
+
+        self._set_busy(True, "Descargando e integrando cambios del equipo...")
+
+        def task():
+            success, msg, diag = git_service.pull(project_path)
+
+            def finish():
+                self._set_busy(False)
+                self.refresh_all_status()
+                if success:
+                    author = status.get("latest_author", "el equipo")
+                    messagebox.showinfo(
+                        "✅ Sincronización Exitosa",
+                        f"¡Tu proyecto se actualizó correctamente!\n\n"
+                        f"Se integraron los cambios de {author} sin perder tu trabajo.",
+                    )
+                    self._set_operation_result(f"Cambios de {author} integrados con éxito.")
+                else:
+                    messagebox.showwarning(diag.get("title", "Error"), diag.get("message", msg))
+                    self._set_operation_result(f"Error al integrar cambios: {msg}", is_error=True, details=diag)
+
+                # Re-evaluar estado colaborativo
+                self._run_live_sync_check(show_clean_notice=False)
+
+            self.after(0, finish)
 
         threading.Thread(target=task, daemon=True).start()
 
@@ -1057,12 +1292,17 @@ class GitManagerApp(ctk.CTk):
             messagebox.showwarning("Proyecto no válido", "Por favor selecciona una carpeta de proyecto válida.")
             return
 
-        has_changes, _ = git_service.has_local_changes(project_path)
+        has_changes, changes = git_service.has_local_changes(project_path)
         if has_changes:
+            files_preview = "\n".join([f"  • {c[2:].strip()}" for c in changes[:6]])
+            if len(changes) > 6:
+                files_preview += f"\n  ... y {len(changes) - 6} archivo(s) más"
+
             messagebox.showwarning(
                 "Cambios sin guardar",
-                "⚠️ Tienes cambios locales sin guardar en tu proyecto.\n\n"
-                "Para no perder tu trabajo, crea un backup antes de cambiar de rama.",
+                f"⚠️ Tienes archivos modificados en tu proyecto sin guardar:\n\n"
+                f"{files_preview}\n\n"
+                "Para no perder tu trabajo ni provocar conflictos, crea un backup antes de cambiar de rama.",
             )
             return
 
