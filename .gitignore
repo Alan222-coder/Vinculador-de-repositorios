@@ -10,6 +10,7 @@ build/
 
 # Archivos de sesión cifrada y temporales
 config/session.dat
+config/settings.json
 __pycache__/
 *.pyc
 *.pyo

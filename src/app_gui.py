@@ -23,7 +23,7 @@ import customtkinter as ctk
 from src.logger_service import logger
 from src.config_manager import config
 from src.git_service import git_service
-from src.github_auth import github_auth
+from src.github_auth import github_auth, format_github_date
 from src.security_checker import SecurityChecker
 from src.error_translator import ErrorTranslator
 
@@ -154,6 +154,30 @@ class GitManagerApp(ctk.CTk):
             anchor="w",
         )
         self.lbl_gh_user.pack(fill="x", padx=15, pady=(0, 8))
+
+        # Acciones para cuentas conectadas
+        self.gh_authenticated_actions = ctk.CTkFrame(self.gh_card, fg_color="transparent")
+        self.btn_my_repos = ctk.CTkButton(
+            self.gh_authenticated_actions,
+            text="📂 Mis Repositorios",
+            height=32,
+            fg_color="#0284c7",
+            hover_color="#0369a1",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._open_my_repos_dialog,
+        )
+        self.btn_my_repos.pack(side="left", padx=(0, 8))
+
+        self.btn_create_new_repo = ctk.CTkButton(
+            self.gh_authenticated_actions,
+            text="➕ Crear Repositorio Nuevo",
+            height=32,
+            fg_color="#16a34a",
+            hover_color="#15803d",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._open_create_repo_dialog,
+        )
+        self.btn_create_new_repo.pack(side="left")
 
         # Sección de login y vinculación manual si no hay sesión
         self.gh_login_section = ctk.CTkFrame(self.gh_card, fg_color="transparent")
@@ -540,12 +564,14 @@ class GitManagerApp(ctk.CTk):
                     )
                     self.lbl_gh_user.configure(text=f"👤 Usuario: {user_label}")
                     self.gh_login_section.pack_forget()
+                    self.gh_authenticated_actions.pack(fill="x", padx=15, pady=(0, 12))
                 else:
                     self.lbl_gh_badge.configure(
                         text="🔴 GitHub no conectado en esta computadora",
                         text_color="#f87171",
                     )
                     self.lbl_gh_user.configure(text="👤 Usuario: No disponible")
+                    self.gh_authenticated_actions.pack_forget()
                     self.gh_login_section.pack(fill="x", padx=15, pady=(0, 12))
 
                 # Actualizar Tarjeta 3: Proyecto Local
@@ -785,6 +811,38 @@ class GitManagerApp(ctk.CTk):
         )
         txt_remote.pack(fill="x", padx=30, pady=4)
 
+        # Opciones para crear nuevo o seleccionar de la cuenta
+        repo_helper_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        repo_helper_row.pack(fill="x", padx=30, pady=(2, 4))
+
+        def fill_remote_url(chosen_url: str):
+            txt_remote.delete(0, "end")
+            txt_remote.insert(0, chosen_url)
+
+        ctk.CTkButton(
+            repo_helper_row,
+            text="➕ Crear repositorio nuevo",
+            height=28,
+            fg_color="#16a34a",
+            hover_color="#15803d",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=lambda: self._open_create_repo_dialog(
+                on_created_callback=lambda data: fill_remote_url(data.get("clone_url", ""))
+            ),
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            repo_helper_row,
+            text="📋 Seleccionar de mis repositorios",
+            height=28,
+            fg_color="#334155",
+            hover_color="#1e293b",
+            font=ctk.CTkFont(size=11),
+            command=lambda: self._open_my_repos_dialog(
+                select_mode_callback=fill_remote_url
+            ),
+        ).pack(side="left")
+
         # Si el usuario ya está autenticado, sugerir repos si los hay
         auth = github_auth.get_auth_status()
         suggested_url = ""
@@ -894,7 +952,7 @@ class GitManagerApp(ctk.CTk):
 
     # ==================== CLONAR REPOSITORIO (Opción B) ====================
 
-    def _open_clone_wizard(self) -> None:
+    def _open_clone_wizard(self, initial_url: str = "") -> None:
         """Asistente para descargar/clonar un repositorio existente de GitHub."""
         dialog = ctk.CTkToplevel(self)
         dialog.title("Clonar Repositorio de GitHub")
@@ -911,6 +969,8 @@ class GitManagerApp(ctk.CTk):
         ctk.CTkLabel(dialog, text="URL del repositorio de GitHub:", anchor="w").pack(fill="x", padx=30, pady=(4, 2))
         txt_url = ctk.CTkEntry(dialog, placeholder_text="https://github.com/usuario/proyecto.git", height=36)
         txt_url.pack(fill="x", padx=30, pady=4)
+        if initial_url:
+            txt_url.insert(0, initial_url)
 
         ctk.CTkLabel(dialog, text="Carpeta de destino en tu computadora:", anchor="w").pack(fill="x", padx=30, pady=(8, 2))
         dest_row = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -968,6 +1028,518 @@ class GitManagerApp(ctk.CTk):
             hover_color="#0369a1",
             command=start_clone,
         ).pack(pady=25)
+
+    # ==================== CREAR Y VER REPOSITORIOS GITHUB ====================
+
+    def _open_create_repo_dialog(self, on_created_callback=None) -> None:
+        """Asistente para crear un nuevo repositorio en GitHub vía la API oficial (POST /user/repos)."""
+        auth = github_auth.get_auth_status()
+        if not auth.get("is_authenticated"):
+            messagebox.showwarning(
+                "GitHub no conectado",
+                "Debes conectar o iniciar sesión con tu cuenta de GitHub antes de crear repositorios.",
+            )
+            return
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Crear Repositorio en GitHub")
+        dialog.geometry("600x530")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        ctk.CTkLabel(
+            dialog,
+            text="➕ CREAR REPOSITORIO EN GITHUB",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(pady=(18, 4))
+
+        user_name = auth.get("username", "usuario")
+        ctk.CTkLabel(
+            dialog,
+            text=f"Se creará en tu cuenta: @{user_name}",
+            font=ctk.CTkFont(size=12),
+            text_color="gray70",
+        ).pack(pady=(0, 12))
+
+        # Nombre del repositorio
+        ctk.CTkLabel(
+            dialog,
+            text="Nombre del repositorio (requerido):",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", padx=30, pady=(6, 2))
+
+        txt_name = ctk.CTkEntry(
+            dialog,
+            placeholder_text="Ejemplo: mi-proyecto-escolar",
+            height=36,
+        )
+        txt_name.pack(fill="x", padx=30, pady=4)
+
+        # Pre-llenar con el nombre de la carpeta seleccionada si existe
+        current_project = config.get_project_path()
+        if current_project and os.path.isdir(current_project):
+            folder_name = os.path.basename(current_project).strip().replace(" ", "-")
+            txt_name.insert(0, folder_name)
+
+        # Descripción
+        ctk.CTkLabel(
+            dialog,
+            text="Descripción (opcional):",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", padx=30, pady=(8, 2))
+
+        txt_desc = ctk.CTkEntry(
+            dialog,
+            placeholder_text="Breve descripción del trabajo o proyecto escolar",
+            height=36,
+        )
+        txt_desc.pack(fill="x", padx=30, pady=4)
+
+        # Visibilidad
+        ctk.CTkLabel(
+            dialog,
+            text="Visibilidad del repositorio:",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", padx=30, pady=(8, 4))
+
+        vis_var = tk.StringVar(value="private")
+
+        vis_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        vis_frame.pack(fill="x", padx=30, pady=2)
+
+        rb_private = ctk.CTkRadioButton(
+            vis_frame,
+            text="🔒 Privado (Solo tú y tu equipo escolar pueden verlo - Recomendado)",
+            variable=vis_var,
+            value="private",
+            font=ctk.CTkFont(size=12),
+        )
+        rb_private.pack(anchor="w", pady=3)
+
+        rb_public = ctk.CTkRadioButton(
+            vis_frame,
+            text="🌐 Público (Cualquier persona en Internet puede verlo)",
+            variable=vis_var,
+            value="public",
+            font=ctk.CTkFont(size=12),
+        )
+        rb_public.pack(anchor="w", pady=3)
+
+        lbl_status = ctk.CTkLabel(
+            dialog,
+            text="",
+            font=ctk.CTkFont(size=12),
+            text_color="#f87171",
+            wraplength=520,
+            justify="center",
+        )
+        lbl_status.pack(pady=6)
+
+        btn_create = ctk.CTkButton(
+            dialog,
+            text="[ 🚀 CREAR REPOSITORIO EN GITHUB ]",
+            height=42,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#16a34a",
+            hover_color="#15803d",
+        )
+        btn_create.pack(pady=(4, 15))
+
+        def execute_create():
+            name = txt_name.get().strip()
+            desc = txt_desc.get().strip()
+            is_priv = (vis_var.get() == "private")
+
+            if not name:
+                lbl_status.configure(text="Debes ingresar un nombre para el repositorio.")
+                return
+
+            if any(c in name for c in [" ", "\\", "/", ":", "*", "?", '"', "<", ">", "|"]):
+                lbl_status.configure(text="El nombre no puede contener espacios ni caracteres especiales (/ \\ * ?).")
+                return
+
+            lbl_status.configure(text="⏳ Creando repositorio en GitHub...", text_color="#38bdf8")
+            btn_create.configure(state="disabled", text="Creando...")
+
+            def task():
+                succ, msg, repo_data = github_auth.create_repository(
+                    name=name,
+                    description=desc,
+                    is_private=is_priv,
+                )
+
+                def finish():
+                    if succ:
+                        dialog.destroy()
+                        clone_url = repo_data.get("clone_url", "")
+                        html_url = repo_data.get("html_url", "")
+                        full_name = repo_data.get("full_name", name)
+
+                        if on_created_callback:
+                            on_created_callback(repo_data)
+
+                        # Requisito 1: Ofrecer automáticamente vincularlo como 'origin' de la carpeta local seleccionada
+                        curr_proj = config.get_project_path()
+                        if curr_proj and os.path.isdir(curr_proj) and not git_service.is_git_repository(curr_proj):
+                            ask_link = messagebox.askyesno(
+                                "¡Repositorio Creado con Éxito!",
+                                f"El repositorio '{full_name}' fue creado exitosamente en GitHub.\n\n"
+                                f"¿Deseas vincularlo automáticamente como el origen (origin) de la carpeta seleccionada:\n"
+                                f"'{curr_proj}'?",
+                            )
+                            if ask_link:
+                                self._auto_link_new_repo(curr_proj, clone_url)
+                                return
+
+                        messagebox.showinfo(
+                            "¡Repositorio Creado!",
+                            f"¡Repositorio creado con éxito en GitHub!\n\n"
+                            f"• Nombre: {full_name}\n"
+                            f"• Visibilidad: {'🔒 Privado' if is_priv else '🌐 Público'}\n"
+                            f"• URL: {html_url}",
+                        )
+                    else:
+                        btn_create.configure(state="normal", text="[ 🚀 CREAR REPOSITORIO EN GITHUB ]")
+                        lbl_status.configure(text=msg, text_color="#f87171")
+                        messagebox.showerror("No se pudo crear el repositorio", msg)
+
+                self.after(0, finish)
+
+            threading.Thread(target=task, daemon=True).start()
+
+        btn_create.configure(command=execute_create)
+
+    def _auto_link_new_repo(self, project_path: str, remote_url: str) -> None:
+        """Vincula automáticamente un repositorio recién creado a la carpeta local activa."""
+        auth = github_auth.get_auth_status()
+        current_name, current_email = git_service.get_git_identity(project_path)
+        if not current_name and auth.get("username"):
+            current_name = auth.get("public_name") or auth.get("username")
+        if not current_email and auth.get("email"):
+            current_email = auth.get("email")
+
+        # Si faltan datos de identidad, abrir el wizard normal con la URL pre-cargada
+        if not current_name or not current_email:
+            self._open_link_wizard()
+            return
+
+        self._set_busy(True, "Vinculando nuevo repositorio con tu carpeta...")
+
+        def task():
+            git_service.set_git_identity(current_name, current_email, project_path, is_global=False)
+
+            def progress(stage: str, fraction: float):
+                self.after(0, lambda: self.lbl_progress_status.configure(text=stage))
+                self.after(0, lambda: self.progress_bar.set(fraction))
+
+            succ, msg, diag = git_service.link_folder_to_github(
+                folder_path=project_path,
+                remote_url=remote_url,
+                commit_message="Primer backup del proyecto escolar",
+                progress_callback=progress,
+            )
+
+            def finish():
+                self._set_busy(False)
+                if succ:
+                    messagebox.showinfo(
+                        "✅ Vinculación Exitosa",
+                        f"¡Tu carpeta fue vinculada y respaldada exitosamente en GitHub!\n\n"
+                        f"• Carpeta: {project_path}\n"
+                        f"• Repositorio: {remote_url}\n"
+                        f"• Rama: main",
+                    )
+                    self._set_operation_result("Proyecto vinculado y respaldado correctamente.")
+                else:
+                    messagebox.showwarning("Atención en la Vinculación", f"{diag.get('title', 'Aviso')}\n\n{msg}")
+                    self._set_operation_result(f"Aviso en vinculación: {msg}", is_error=True, details=diag)
+                self.refresh_all_status()
+
+            self.after(0, finish)
+
+        threading.Thread(target=task, daemon=True).start()
+
+    def _open_my_repos_dialog(self, select_mode_callback=None) -> None:
+        """Pantalla o sección 'Mis repositorios' que lista TODOS los repositorios de la cuenta autenticada."""
+        auth = github_auth.get_auth_status()
+        if not auth.get("is_authenticated"):
+            messagebox.showwarning(
+                "GitHub no conectado",
+                "Debes conectar tu cuenta de GitHub para ver tus repositorios.",
+            )
+            return
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Mis Repositorios en GitHub")
+        dialog.geometry("800x650")
+        dialog.minsize(720, 520)
+        dialog.transient(self)
+
+        # Cabecera
+        top_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        top_frame.pack(fill="x", padx=20, pady=(15, 6))
+
+        title_col = ctk.CTkFrame(top_frame, fg_color="transparent")
+        title_col.pack(side="left", fill="y")
+
+        ctk.CTkLabel(
+            title_col,
+            text="📋 MIS REPOSITORIOS EN GITHUB",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            anchor="w",
+        ).pack(anchor="w")
+
+        user_name = auth.get("username", "usuario")
+        lbl_user_subtitle = ctk.CTkLabel(
+            title_col,
+            text=f"Cuenta: @{user_name}  •  Cargando repositorios...",
+            font=ctk.CTkFont(size=12),
+            text_color="gray70",
+            anchor="w",
+        )
+        lbl_user_subtitle.pack(anchor="w")
+
+        btn_box = ctk.CTkFrame(top_frame, fg_color="transparent")
+        btn_box.pack(side="right")
+
+        btn_new_repo = ctk.CTkButton(
+            btn_box,
+            text="➕ Crear Repositorio",
+            width=150,
+            height=32,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#16a34a",
+            hover_color="#15803d",
+            command=lambda: self._open_create_repo_dialog(on_created_callback=lambda _: load_repos()),
+        )
+        btn_new_repo.pack(side="left", padx=(0, 8))
+
+        btn_refresh = ctk.CTkButton(
+            btn_box,
+            text="🔄 Actualizar",
+            width=100,
+            height=32,
+            font=ctk.CTkFont(size=12),
+            fg_color="#334155",
+            hover_color="#1e293b",
+            command=lambda: load_repos(),
+        )
+        btn_refresh.pack(side="left")
+
+        # Buscador / Filtro interactivo
+        search_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        search_frame.pack(fill="x", padx=20, pady=(4, 8))
+
+        txt_search = ctk.CTkEntry(
+            search_frame,
+            placeholder_text="🔍 Buscar repositorio por nombre...",
+            height=36,
+        )
+        txt_search.pack(fill="x")
+
+        # Contenedor con scroll para la lista de repos
+        scroll_list = ctk.CTkScrollableFrame(dialog, corner_radius=10)
+        scroll_list.pack(fill="both", expand=True, padx=20, pady=(0, 15))
+
+        all_repos_data: List[Dict[str, Any]] = []
+
+        def render_repos(filter_text: str = ""):
+            for widget in scroll_list.winfo_children():
+                widget.destroy()
+
+            clean_q = filter_text.strip().lower()
+            filtered = [
+                r for r in all_repos_data
+                if not clean_q or clean_q in r.get("name", "").lower() or clean_q in r.get("description", "").lower()
+            ]
+
+            lbl_user_subtitle.configure(
+                text=f"Cuenta: @{user_name}  •  {len(filtered)} de {len(all_repos_data)} repositorios"
+            )
+
+            if not filtered:
+                ctk.CTkLabel(
+                    scroll_list,
+                    text="No se encontraron repositorios con ese criterio de búsqueda.",
+                    font=ctk.CTkFont(size=13),
+                    text_color="gray60",
+                ).pack(pady=40)
+                return
+
+            curr_proj = config.get_project_path()
+            can_link = bool(curr_proj and os.path.isdir(curr_proj) and not git_service.is_git_repository(curr_proj))
+
+            for repo in filtered:
+                card = ctk.CTkFrame(scroll_list, corner_radius=8, fg_color="#1e293b")
+                card.pack(fill="x", pady=5, padx=5)
+
+                # Fila 1: Nombre, badge de privacidad y rama
+                r1 = ctk.CTkFrame(card, fg_color="transparent")
+                r1.pack(fill="x", padx=12, pady=(10, 3))
+
+                name_lbl = ctk.CTkLabel(
+                    r1,
+                    text=f"📁 {repo.get('name', '')}",
+                    font=ctk.CTkFont(size=14, weight="bold"),
+                    text_color="#38bdf8",
+                )
+                name_lbl.pack(side="left", padx=(0, 8))
+
+                # Badge Privado / Público
+                is_priv = repo.get("is_private", False)
+                priv_text = "🔒 Privado" if is_priv else "🌐 Público"
+                priv_fg = "#7c2d12" if is_priv else "#064e3b"
+                priv_tc = "#fca5a5" if is_priv else "#6ee7b7"
+
+                ctk.CTkLabel(
+                    r1,
+                    text=f" {priv_text} ",
+                    font=ctk.CTkFont(size=11, weight="bold"),
+                    fg_color=priv_fg,
+                    text_color=priv_tc,
+                    corner_radius=4,
+                ).pack(side="left", padx=(0, 8))
+
+                def_b = repo.get("default_branch") or "main"
+                ctk.CTkLabel(
+                    r1,
+                    text=f"🌿 {def_b}",
+                    font=ctk.CTkFont(size=11),
+                    text_color="gray70",
+                ).pack(side="left")
+
+                # Fila 2: Descripción (si existe)
+                desc = repo.get("description", "").strip()
+                if desc:
+                    ctk.CTkLabel(
+                        card,
+                        text=desc,
+                        font=ctk.CTkFont(size=12),
+                        text_color="gray80",
+                        anchor="w",
+                        justify="left",
+                    ).pack(fill="x", padx=12, pady=(0, 4))
+
+                # Fila 3: Fecha de actualización y botones de acción
+                r3 = ctk.CTkFrame(card, fg_color="transparent")
+                r3.pack(fill="x", padx=12, pady=(2, 10))
+
+                date_str = format_github_date(repo.get("updated_at", ""))
+                ctk.CTkLabel(
+                    r3,
+                    text=f"🕒 Último cambio: {date_str}",
+                    font=ctk.CTkFont(size=11),
+                    text_color="gray60",
+                ).pack(side="left")
+
+                actions_box = ctk.CTkFrame(r3, fg_color="transparent")
+                actions_box.pack(side="right")
+
+                # Botón Abrir en Navegador
+                html_url = repo.get("html_url") or f"https://github.com/{repo.get('full_name')}"
+                ctk.CTkButton(
+                    actions_box,
+                    text="🌐 Ver en GitHub",
+                    height=28,
+                    width=110,
+                    font=ctk.CTkFont(size=11),
+                    fg_color="#334155",
+                    hover_color="#1e293b",
+                    command=lambda u=html_url: webbrowser.open(u),
+                ).pack(side="left", padx=4)
+
+                # Si venimos desde el asistente de vincular
+                if select_mode_callback:
+                    ctk.CTkButton(
+                        actions_box,
+                        text="✔️ Seleccionar",
+                        height=28,
+                        width=100,
+                        font=ctk.CTkFont(size=11, weight="bold"),
+                        fg_color="#16a34a",
+                        hover_color="#15803d",
+                        command=lambda u=repo.get("clone_url", ""): (
+                            select_mode_callback(u),
+                            dialog.destroy(),
+                        ),
+                    ).pack(side="left", padx=4)
+                else:
+                    # Botón Clonar a PC
+                    clone_url = repo.get("clone_url", "")
+                    ctk.CTkButton(
+                        actions_box,
+                        text="📥 Clonar a mi PC",
+                        height=28,
+                        width=120,
+                        font=ctk.CTkFont(size=11, weight="bold"),
+                        fg_color="#0284c7",
+                        hover_color="#0369a1",
+                        command=lambda u=clone_url: (
+                            dialog.destroy(),
+                            self._open_clone_wizard(initial_url=u),
+                        ),
+                    ).pack(side="left", padx=4)
+
+                    # Botón Vincular a la carpeta actual si no está vinculada
+                    if can_link:
+                        ctk.CTkButton(
+                            actions_box,
+                            text="🔗 Vincular a mi carpeta",
+                            height=28,
+                            width=140,
+                            font=ctk.CTkFont(size=11, weight="bold"),
+                            fg_color="#16a34a",
+                            hover_color="#15803d",
+                            command=lambda u=clone_url, p=curr_proj: (
+                                dialog.destroy(),
+                                self._auto_link_new_repo(p, u),
+                            ),
+                        ).pack(side="left", padx=4)
+
+        def on_search_change(*_):
+            render_repos(txt_search.get())
+
+        txt_search.bind("<KeyRelease>", on_search_change)
+
+        def load_repos():
+            for w in scroll_list.winfo_children():
+                w.destroy()
+            ctk.CTkLabel(
+                scroll_list,
+                text="⏳ Obteniendo repositorios desde GitHub...",
+                font=ctk.CTkFont(size=13),
+                text_color="#38bdf8",
+            ).pack(pady=40)
+            btn_refresh.configure(state="disabled")
+
+            def task():
+                succ, repos, err_msg = github_auth.get_all_user_repositories()
+
+                def finish():
+                    btn_refresh.configure(state="normal")
+                    if succ:
+                        nonlocal all_repos_data
+                        all_repos_data = repos
+                        render_repos(txt_search.get())
+                    else:
+                        for w in scroll_list.winfo_children():
+                            w.destroy()
+                        ctk.CTkLabel(
+                            scroll_list,
+                            text=f"No se pudieron cargar los repositorios:\n\n{err_msg}",
+                            font=ctk.CTkFont(size=13),
+                            text_color="#f87171",
+                            wraplength=550,
+                        ).pack(pady=40)
+
+                self.after(0, finish)
+
+            threading.Thread(target=task, daemon=True).start()
+
+        load_repos()
 
     # ==================== OPERACIONES: PULL ====================
 
