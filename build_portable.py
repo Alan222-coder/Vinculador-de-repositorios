@@ -36,7 +36,7 @@ def build() -> bool:
         "-m",
         "PyInstaller",
         "--noconfirm",
-        "--onedir",
+        "--onefile",
         "--windowed",
         "--name=GitManager",
         f"--add-data={ctk_data_arg}",
@@ -59,7 +59,17 @@ def build() -> bool:
         print("\n[ERROR] Fallo durante la compilacion con PyInstaller.")
         return False
 
-    print("\n[OK] Binarios compilados correctamente en:", output_app_dir)
+    single_exe_path = os.path.join(dist_dir, "GitManager.exe")
+    if not os.path.exists(single_exe_path):
+        print("\n[ERROR] No se encontro el ejecutable generado en:", single_exe_path)
+        return False
+
+    print("\n[OK] Archivo portable .exe único generado con éxito:")
+    print("     ->", single_exe_path)
+
+    # Preparar también la carpeta organizada dist/GitManager para pendrive
+    os.makedirs(output_app_dir, exist_ok=True)
+    shutil.copy2(single_exe_path, os.path.join(output_app_dir, "GitManager.exe"))
 
     # Crear carpetas esenciales dentro de dist/GitManager para asegurar portabilidad
     target_config = os.path.join(output_app_dir, "config")
@@ -79,23 +89,25 @@ def build() -> bool:
     readme_pendrive = os.path.join(output_app_dir, "LEEME_PENDRIVE.txt")
     with open(readme_pendrive, "w", encoding="utf-8") as f:
         f.write(
-            "GIT MANAGER - VERSION PORTABLE\n"
-            "==============================\n\n"
-            "Esta carpeta contiene la aplicacion completa para llevar en un pendrive.\n\n"
-            "INSTRUCCIONES:\n"
-            "1. Haz doble clic en 'GitManager.exe' para abrir el programa.\n"
-            "2. No necesitas instalar Python ni librerias.\n"
-            "3. Puedes mover esta carpeta a cualquier PC (Escritorio, Documentos o Pendrive).\n\n"
+            "GIT MANAGER - EJECUTABLE PORTABLE AUTÓNOMO\n"
+            "==========================================\n\n"
+            "Puedes copiar el archivo 'GitManager.exe' y llevarlo a cualquier lugar\n"
+            "(Escritorio, Documentos o Pendrive) y ejecutarlo con doble clic.\n\n"
+            "CARACTERÍSTICAS:\n"
+            "1. Archivo único (.exe): No requiere instalar Python ni librerías.\n"
+            "2. Portable: Guarda su configuración automáticamente sin tocar el sistema.\n"
+            "3. Compatible con Windows 10 y 11.\n\n"
             "NOTA SOBRE GIT:\n"
-            "- Si la computadora de la escuela ya tiene Git instalado, el programa lo usara automaticamente.\n"
-            "- Si la computadora no tiene Git ni conexion a Internet para instalarlo, puedes descargar 'MinGit'\n"
-            "  (la version portable oficial de Git para Windows) y extraer su contenido dentro de la carpeta 'git/'.\n"
+            "- Si la computadora ya tiene Git instalado, el programa lo usará automáticamente.\n"
+            "- Si la computadora no tiene Git ni conexión a Internet para descargarlo,\n"
+            "  puedes colocar una copia de MinGit en una carpeta 'git/' junto al ejecutable.\n"
         )
 
-    print("[OK] Estructura de carpetas portables (config/, logs/, git/) preparada.")
+    print("[OK] Estructura de distribución preparada.")
     print("====================================================")
-    print("Compilacion completada exitosamente.")
-    print(f"Ubicacion final: {output_app_dir}")
+    print("Compilación completada exitosamente.")
+    print(f"1. Archivo .exe único portable: {single_exe_path}")
+    print(f"2. Carpeta para pendrive:       {output_app_dir}")
     print("====================================================")
     return True
 

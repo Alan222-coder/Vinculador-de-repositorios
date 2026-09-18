@@ -58,7 +58,10 @@ class GitManagerApp(ctk.CTk):
     def _set_app_icon(self) -> None:
         try:
             from src.logger_service import get_base_dir
-            icon_path = os.path.join(get_base_dir(), "assets", "icon.ico")
+            base = getattr(sys, "_MEIPASS", get_base_dir())
+            icon_path = os.path.join(base, "assets", "icon.ico")
+            if not os.path.exists(icon_path):
+                icon_path = os.path.join(get_base_dir(), "assets", "icon.ico")
             if os.path.exists(icon_path):
                 self.iconbitmap(icon_path)
         except Exception:

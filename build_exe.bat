@@ -41,7 +41,9 @@ if %errorlevel% neq 0 (
 echo.
 echo =======================================================
 echo  COMPILACIÓN FINALIZADA CON ÉXITO
-echo  La carpeta portable lista para pendrive se encuentra en:
-echo  dist\GitManager\
+echo  1. Archivo único portable (.exe):
+echo     dist\GitManager.exe
+echo  2. Carpeta lista para pendrive:
+echo     dist\GitManager\
 echo =======================================================
 pause
