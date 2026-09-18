@@ -16,6 +16,7 @@
 9. [Seguridad y Protección contra Fuga de Secretos](#-seguridad-y-protección-contra-fuga-de-secretos)
 10. [Manejo de Autenticación en PCs que se Restauran Diariamente](#-manejo-de-autenticación-en-pcs-que-se-restauran-diariamente)
 11. [Matriz de Pruebas y Casos de Uso](#-matriz-de-pruebas-y-casos-de-uso)
+12. [Changelog / Registro de Cambios](#-changelog--registro-de-cambios)
 
 ---
 
@@ -238,3 +239,34 @@ Todos los siguientes casos fueron implementados y verificados:
 | **12** | Git no disponible | Muestra advertencia amigable explicando cómo colocar Git portable o instalarlo. | Exitoso |
 | **13** | Ejecución desde Pendrive | Se ejecuta autónomamente desde `dist/GitManager/GitManager.exe` sin rutas absolutas. | Exitoso |
 | **14** | Copiado a otra PC limpia | Funciona sin necesidad de tener Python ni librerías instaladas en la PC de destino. | Exitoso |
+
+---
+
+## 📝 Changelog / Registro de Cambios
+
+### [v1.1.0] - 2026-09-17
+
+#### 🔍 BLOQUE 1: Diagnóstico y Corrección de Estado "No Guardado" al Cambiar de Rama
+- **Diagnóstico del log (`logs/app.log`):**
+  - Se confirmó en auditoría que el comando `git commit` y `git push` **sí se ejecutaban con éxito** (código 0). No hubo falla en Git.
+  - **Causa raíz 1 (Bucle de ensuciamiento por logs):** Los archivos `logs/app.log` y `dist/GitManager/logs/app.log` se encontraban accidentalmente rastreados en el índice de Git. Cada vez que la aplicación registraba que el backup había finalizado con éxito, el logger escribía una línea en `app.log`, modificando el árbol de trabajo inmediatamente después del commit. Por ende, `git status` volvía a reportar cambios pendientes instantáneamente.
+  - **Causa raíz 2 (Bloqueo de UI por ventana modal):** El método `_run_backup_process` ejecutaba `messagebox.showinfo` antes de refrescar el estado global de la interfaz (`refresh_all_status`), manteniendo congelado el indicador visual antiguo hasta que el usuario cerraba la ventana emergente.
+  - **Causa raíz 3 (Diálogo de ramas sin detalle):** El diálogo de cambio de rama (`_open_branch_dialog`) solo emitía una alerta genérica sin indicar con precisión cuáles archivos estaban modificados.
+- **Solución implementada:**
+  - Se creó y configuró `.gitignore` para excluir permanentemente `logs/`, `*.log`, `dist/`, `build/`, `*.spec` y `config/session.dat`.
+  - Se desindexaron (`git rm --cached`) todos los logs, caches y artefactos binarios.
+  - Se añadió en `git_service.py` un filtro inteligente que ignora archivos de log y artefactos internos al procesar `git status --porcelain`.
+  - Se reordenó el flujo en `app_gui.py` para ejecutar `self.refresh_all_status()` **antes** de cualquier notificación modal.
+  - Se actualizó el diálogo de cambio de rama para listar explícitamente qué archivos están pendientes de guardar.
+
+#### 👥 BLOQUE 2: Sincronización en Vivo y Colaboración en Equipo
+- **Detección remota periódica y manual:**
+  - Se añadió un hilo de sincronización en segundo plano (`_start_live_sync_loop`) que ejecuta `git fetch` periódicamente (cada 90 segundos) sin bloquear la interfaz gráfica ni interferir con el trabajo del usuario.
+  - Se añadió el botón manual **`[ 🔄 Buscar cambios de otros ]`** para verificar cambios remotos bajo demanda.
+- **Tarjeta visual de colaboración (`collab_card`):**
+  - Muestra en tiempo real quién subió cambios nuevos a GitHub (usuario/autor), hace cuánto tiempo (tiempo relativo en minutos/horas/días) y el mensaje de commit:
+    `"Hay 1 cambio(s) nuevo(s) en GitHub de [usuario] hace 5 minutos: Mensaje"`
+  - Incluye botones directos **`[ 📥 Traer cambios del equipo ]`** y **`[ Ver detalles ]`**.
+- **Seguridad estricta contra pérdida de datos locales:**
+  - Si un integrante del equipo subió cambios en los mismos archivos que el usuario tiene modificados localmente sin guardar, la aplicación detecta la colisión mediante `check_collaboration_status()` y **detiene la sincronización automática**.
+  - Muestra un diálogo con la lista exacta de archivos en riesgo de choque y permite al usuario crear un backup previo de su versión antes de traer la versión remota, impidiendo cualquier sobrescritura destructiva.
